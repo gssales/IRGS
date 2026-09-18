@@ -30,8 +30,11 @@ import json
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
     path_prefix = os.path.join(model_path, name, "ours_{}".format(iteration))
     gts_path = os.path.join(path_prefix, "gt")
-    
-    keys = ["render", "render_env", "diffuse", "specular", "roughness", "base_color", "base_color_linear", "rend_alpha", "rend_normal", "visibility"]
+
+    if args.save_extra:
+        keys = ["render", "render_env", "diffuse", "specular", "roughness", "base_color", "base_color_linear", "rend_alpha", "rend_normal", "visibility"]
+    else:
+        keys = ["render", "rend_normal"] if args.save_normals else ["render"]
     
     makedirs(gts_path, exist_ok=True)
     for key in keys:
@@ -72,9 +75,9 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     results_dict["ssim_avg"] = ssim_avg
     results_dict["lpips_avg"] = lpips_avg
     print("\n[ITER {}] Evaluating {} set: PSNR {} SSIM {} LPIPS {}".format(iteration, name, psnr_avg, ssim_avg, lpips_avg))
-    with open(os.path.join(model_path, name, "nvs_results.json"), "w") as f:
+    with open(os.path.join(model_path, name, "results.json"), "w") as f:
         json.dump(results_dict, f, indent=4)
-    print("Results saved to", os.path.join(model_path, name, "nvs_results.json"))
+    print("Results saved to", os.path.join(model_path, name, "results.json"))
     
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
     with torch.no_grad():
@@ -109,6 +112,8 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--no_save", default=False, action='store_true')
     parser.add_argument("--no_lpips", default=False, action='store_true')
+    parser.add_argument("--save_extra", default=False, action='store_true')
+    parser.add_argument("--save_normals", default=False, action='store_true')
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
 
