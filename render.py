@@ -57,6 +57,12 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             continue
         
         torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
+
+        # view.mask is a boolean mask of shape [H,W]
+        if view.mask is None:
+            mask = torch.ones_like(image, dtype=torch.float32, device="cuda")
+        else:
+            mask = view.mask.float().to("cuda")
         for key in keys:
             out = render_pkg[key]
             if 'normal' in key:
@@ -65,7 +71,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
                 out = (out + 1) / 2
             if out.shape[0] == 1:
                 out = out.repeat(3, 1, 1)
-            torchvision.utils.save_image(out * view.mask.float().cuda(), os.path.join(path_prefix, key, '{0:05d}'.format(idx) + ".png"))
+            torchvision.utils.save_image(out * mask, os.path.join(path_prefix, key, '{0:05d}'.format(idx) + ".png"))
             
     psnr_avg /= len(views)
     ssim_avg /= len(views)

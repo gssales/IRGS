@@ -23,12 +23,7 @@ from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
 
-def render_fps(dataset : ModelParams, checkpoint_path: str, pipeline : PipelineParams, 
-    pbr: bool = False,
-    metallic: bool = False,
-    tone: bool = False,
-    gamma: bool = False,
-    indirect: bool = False,
+def render_fps(dataset : ModelParams, pipeline : PipelineParams, 
     renders_per_view : int = 100
 ) -> None:
     with torch.no_grad():
@@ -68,4 +63,4 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    render_fps(model.extract(args), args.checkpoint, pipeline.extract(args))
+    render_fps(model.extract(args), pipeline.extract(args))
