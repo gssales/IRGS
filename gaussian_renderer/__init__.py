@@ -395,7 +395,7 @@ def rendering_equation(base_color, roughness, normals, position, viewdirs, pc, p
         f_d = base_color[:, None] / np.pi
         _f0 = f0
     else:
-        f_d = (1.0 - metallic) * base_color[:, None] / np.pi
+        f_d = ((1.0 - metallic) * base_color)[:, None] / np.pi
         _f0 = 0.04 * (1.0 - metallic) + base_color * metallic
     f_s = GGX_specular(normals, viewdirs, incident_dirs, roughness, fresnel=_f0[:, None, :])
 
