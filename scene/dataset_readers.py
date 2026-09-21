@@ -267,14 +267,14 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
 
             norm_data = im_data / 255.0
-            if norm_data.shape[-1] == 4:
-                mask = norm_data[:, :, 3] > 0.5
+            mask_path = os.path.join(path, frame["file_path"] + "_alpha" + extension)
+            if os.path.exists(mask_path):
+                mask_image = Image.open(mask_path)
+                mask_data = np.array(mask_image.convert("L")) / 255.0
+                mask = mask_data > 0.5
             else:
-                mask_path = os.path.join(path, frame["file_path"] + "_alpha" + extension)
-                if os.path.exists(mask_path):
-                    mask_image = Image.open(mask_path)
-                    mask_data = mask_image / 255.0
-                    mask = mask_data[:, :, 0] > 0.5
+                if norm_data.shape[-1] == 4:
+                    mask = norm_data[:, :, 3] > 0.5
                 else:
                     mask = None
             arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
