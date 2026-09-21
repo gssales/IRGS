@@ -115,8 +115,12 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
     
     shs = pc.get_features
     colors_precomp = None
-    
-    features = torch.cat([base_color, roughness], dim=-1)
+
+    if pc.mettalic:
+        metallic = pc.get_mettalic
+        features = torch.cat([base_color, roughness, metallic], dim=-1)
+    else:
+        features = torch.cat([base_color, roughness], dim=-1)
 
     contrib, rendered_image, rendered_features, radii, allmap = rasterizer(
         means3D = means3D,
@@ -170,12 +174,16 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
     normal_map = normal_map / render_alpha.permute(1,2,0).clamp_min(1e-6)  
     normal_map = F.normalize(normal_map, dim=-1)
 
-    rendered_base_color, rendered_roughness = rendered_features.split([3, 1], dim=0)
+    if pc.mettalic:
+        rendered_base_color, rendered_roughness, rendered_metallic = rendered_features.split([3, 1, 1], dim=0)
+    else:
+        rendered_base_color, rendered_roughness = rendered_features.split([3, 1], dim=0)
     if base_color_scale is not None:
         rendered_base_color = rendered_base_color * base_color_scale[:, None, None]
 
     if material_only:
         results = {
+            "metallic": rendered_metallic * render_alpha if pc.mettalic else None,
             "roughness": rendered_roughness * render_alpha,
             "base_color": rgb_to_srgb(rendered_base_color) * render_alpha,
             "base_color_linear": rendered_base_color * render_alpha,
@@ -214,9 +222,11 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
     rays_d = viewpoint_camera.rays_d_hw
     w_o = -rays_d
     if training:
-        render_results = rendering_equation(rendered_base_color.permute(1, 2, 0)[mask], rendered_roughness.permute(1, 2, 0)[mask], normal_map[mask], points[mask], w_o[mask], pc, pipe=pipe, training=training, camera_center=viewpoint_camera.camera_center)
+        render_results = rendering_equation(rendered_base_color.permute(1, 2, 0)[mask], rendered_roughness.permute(1, 2, 0)[mask], normal_map[mask], points[mask], w_o[mask], pc, pipe=pipe, training=training, camera_center=viewpoint_camera.camera_center,
+                                            metallic=rendered_metallic.permute(1, 2, 0)[mask] if pc.mettalic else None)
     else:
-        render_results = rendering_equation_chunk(rendered_base_color.permute(1, 2, 0)[mask], rendered_roughness.permute(1, 2, 0)[mask], normal_map[mask], points[mask], w_o[mask], pc, pipe=pipe, training=training, relight=relight, camera_center=viewpoint_camera.camera_center)
+        render_results = rendering_equation_chunk(rendered_base_color.permute(1, 2, 0)[mask], rendered_roughness.permute(1, 2, 0)[mask], normal_map[mask], points[mask], w_o[mask], pc, pipe=pipe, training=training, relight=relight, camera_center=viewpoint_camera.camera_center,
+                                                  metallic=rendered_metallic.permute(1, 2, 0)[mask] if pc.mettalic else None)
         
     diffuse = render_results['diffuse']
     specular = render_results['specular']
@@ -302,14 +312,14 @@ def render_ir(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tenso
 
     return results
 
-def rendering_equation_chunk(base_color, roughness, normal, position, w_o, pc, pipe, training=False, f0=0.02, relight=False, chunk_size=2**20, camera_center=None, image_sh=None, **kwargs):
+def rendering_equation_chunk(base_color, roughness, normal, position, w_o, pc, pipe, training=False, f0=0.02, relight=False, chunk_size=2**20, camera_center=None, image_sh=None, metallic=None, **kwargs):
     chunk_size = chunk_size // (pipe.diffuse_sample_num + pipe.light_sample_num)
     if base_color.shape[0] <= chunk_size:
-        return rendering_equation(base_color, roughness, normal, position, w_o, pc, pipe, training, f0, relight=relight, camera_center=camera_center, **kwargs)
+        return rendering_equation(base_color, roughness, normal, position, w_o, pc, pipe, training, f0, relight=relight, camera_center=camera_center, metallic=metallic, **kwargs)
     else:
         results = []
         for i in range(0, base_color.shape[0], chunk_size):
-            results.append(rendering_equation(base_color[i:i+chunk_size], roughness[i:i+chunk_size], normal[i:i+chunk_size], position[i:i+chunk_size], w_o[i:i+chunk_size], pc, pipe, training, f0, relight=relight, camera_center=camera_center, **kwargs))
+            results.append(rendering_equation(base_color[i:i+chunk_size], roughness[i:i+chunk_size], normal[i:i+chunk_size], position[i:i+chunk_size], w_o[i:i+chunk_size], pc, pipe, training, f0, relight=relight, camera_center=camera_center, metallic=metallic[i:i+chunk_size], **kwargs))
         return {k: torch.cat([r[k] for r in results], 0) for k in results[0]}
     
 def sample_incident_rays(normals, is_training=False, sample_num=24):
@@ -322,7 +332,7 @@ def sample_incident_rays(normals, is_training=False, sample_num=24):
 
     return incident_dirs, incident_areas  # [N, S, 3], [N, S, 1]
 
-def rendering_equation(base_color, roughness, normals, position, viewdirs, pc, pipe, training=False, f0=0.04, relight=False, camera_center=None, **kwargs):
+def rendering_equation(base_color, roughness, normals, position, viewdirs, pc, pipe, training=False, f0=0.04, relight=False, camera_center=None, metallic=None, **kwargs):
     B = base_color.shape[0]
     envmap = pc.get_envmap
     
@@ -381,8 +391,13 @@ def rendering_equation(base_color, roughness, normals, position, viewdirs, pc, p
     incident_lights = incident_visibility * global_incident_lights + local_incident_lights
     
     n_d_i = (normals[:, None] * incident_dirs).sum(-1, keepdim=True).clamp(min=0)
-    f_d = base_color[:, None] / np.pi
-    f_s = GGX_specular(normals, viewdirs, incident_dirs, roughness, fresnel=0.04)
+    if metallic is None:
+        f_d = base_color[:, None] / np.pi
+        _f0 = f0
+    else:
+        f_d = (1.0 - metallic) * base_color[:, None] / np.pi
+        _f0 = 0.04 * (1.0 - metallic) + base_color * metallic
+    f_s = GGX_specular(normals, viewdirs, incident_dirs, roughness, fresnel=_f0[:, None, :])
 
     transport = incident_lights * incident_areas * n_d_i  # （num_pts, num_sample, 3)
     diffuse = ((f_d) * transport).mean(dim=-2)

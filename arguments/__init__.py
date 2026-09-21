@@ -152,6 +152,8 @@ class OptimizationParams(ParamGroup):
         
         self.train_ray = False
         self.trace_num_rays = 2**18
+        
+        self.metallic = False
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):
