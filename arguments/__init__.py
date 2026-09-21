@@ -73,6 +73,7 @@ class ModelParams(ParamGroup):
         self.envmap_init_value = 1.5
         self.envmap_activation = 'exp'
 
+        self.metallic = False
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -152,8 +153,6 @@ class OptimizationParams(ParamGroup):
         
         self.train_ray = False
         self.trace_num_rays = 2**18
-        
-        self.metallic = False
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):

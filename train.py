@@ -45,6 +45,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     
     gaussians = GaussianModel(dataset.sh_degree)
     set_gaussian_para(gaussians, opt)
+    gaussians.metallic = dataset.metallic
     
     scene = Scene(dataset, gaussians)
     gaussians.training_setup(opt)
@@ -174,7 +175,6 @@ def set_gaussian_para(gaussians, opt):
     gaussians.init_base_color_value = opt.init_base_color_value
     gaussians.init_metallic_value = opt.init_metallic_value
     gaussians.init_roughness_value = opt.init_roughness_value
-    gaussians.metallic = opt.metallic
 
 def save_training_vis(viewpoint_cam, gaussians, background, render_fn, pipe, opt, iteration):
     with torch.no_grad():
