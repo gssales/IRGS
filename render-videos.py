@@ -454,6 +454,7 @@ if __name__ == "__main__":
 
     dataset, iteration, pipe = model.extract(args), args.iteration, pipeline.extract(args)
     gaussians = GaussianModel(dataset.sh_degree)
+    gaussians.metallic = dataset.metallic
     scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
     gaussians.build_bvh()      
     gaussians.env_map.update_pdf()

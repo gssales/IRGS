@@ -88,6 +88,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
+        gaussians.metallic = dataset.metallic
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
         gaussians.build_bvh()      
         gaussians.env_map.update_pdf()
